@@ -22,12 +22,14 @@ Real-time seat states are surfaced through a **live web dashboard** accessible t
 
 ```
 Per-seat sensor node (ESP32)
-├── FSR / Load Cell (chair) → detects sitting
+├── MMwave sensor → detects sitting
+├── SDC40 Co2 Sensor -> detect if sitting
 ├── IMU - MPU6050 (desk) → detects activity/vibration
-├── RGB LED → hoarding alert (off during normal use)
-└── Tactile Button → "I'm back" confirmation
+├── RGB LED → turns green when seat is occupied (When you tap your student ID card)
+└── RFID Sensor → Telling the system you have occupied the seat (can be replaced by BLE)
 │
 └── Wi-Fi → Flask Server
+├── Using XGBoost to determine the state of the seat (vacant, occupied, hoarded)
 ├── Seat state aggregation & timeout logic
 ├── Web Dashboard (Socket.IO real-time updates)
 └── Staff alert system
@@ -36,7 +38,7 @@ Per-seat sensor node (ESP32)
 ### Data Flow
 
 1. Each ESP32 reads its sensors periodically and sends seat state data to the Flask server over Wi-Fi
-2. The server aggregates data from all seats, applies timeout/hoarding logic, and maintains the current state of every seat
+2. The server combine all incoming data, applies the XGBoost model to classify each seat's state, and runs timeout logic to detect hoarding
 3. The web dashboard receives real-time updates via Socket.IO and displays a floor map with seat statuses
 4. When hoarding is suspected, the server instructs the ESP32 to light the LED; the student can press the button to clear the alert
 
@@ -44,125 +46,152 @@ Per-seat sensor node (ESP32)
 
 ### ESP32 DevKit V1 (WROOM-32) — The Controller (~$4–6)
 
-The central microcontroller for each seat node. It reads all sensors, controls the LED and button, and communicates with the server over its **built-in Wi-Fi** — no extra networking hardware required. Cheap, widely supported, and runs Arduino or MicroPython. One per seat.
+The central microcontroller for each seat node. It reads all sensors, controls the RGB LED and RFID reader, and communicates with the server over its **built-in Wi-Fi** — no extra networking hardware required. Cheap, widely supported, and runs Arduino or MicroPython. One per seat.
 
 ### IMU — MPU6050 (~$1–2) — Desk Vibration Sensor
 
 Mounted to the underside of the desk with adhesive. Detects **activity on the desk surface**: writing, typing, page turning, placing or removing items. Answers the question: _"Is someone actively using this desk?"_
 
-The IMU catches activity that the chair sensor alone would miss — for example, a student standing briefly, leaning forward, or reaching across the desk. It also helps detect the **transition from occupied to hoarding**: belongings sitting on a desk produce no vibration, so sustained silence combined with no chair pressure signals likely hoarding.
+The IMU catches activity that mmWave alone would miss — for example, a student standing briefly, leaning forward, or reaching across the desk. It also helps detect the **transition from occupied to hoarding**: belongings sitting on a desk produce no vibration, so sustained silence combined with no mmWave presence signals likely hoarding.
 
-### FSR / Load Cell (~$2–5) — Chair Pressure Sensor
+### mmWave Radar Sensor — Presence Detection (~$3–6)
 
-Placed under or on the chair seat. Detects **whether someone is physically sitting down**. This is the **primary occupancy signal** — the most reliable and most direct indicator.
+Mounted facing the seat area. Detects **micro-motion and breathing patterns** to confirm whether a living person is present — distinguishing a seated student from an abandoned bag of belongings. Unlike PIR sensors, mmWave can detect a completely still person.
 
-A weight threshold (~15 kg) distinguishes a person from a bag left on the chair. The chair sensor is critical because a student sitting still and reading produces almost zero desk vibration — the IMU alone would miss them entirely.
+Combined with the IMU, it covers the full detection surface:
 
-### Why Both IMU and FSR?
-
-They cover each other's blind spots:
-
-| Scenario | Chair FSR | Desk IMU | Correct State |
+| Scenario | mmWave | Desk IMU | Correct State |
 |---|---|---|---|
 | Student sitting and typing | ✓ Detected | ✓ Detected | Occupied |
-| Student sitting still, reading | ✓ Detected | ✗ Missed | Occupied (FSR saves it) |
-| Student standing at desk briefly | ✗ Missed | ✓ Detected | Occupied (IMU saves it) |
-| Bag on chair, stuff on desk, nobody there | ✗ Below threshold | ✗ No vibration | Hoarded |
+| Student sitting still, reading | ✓ Detected | ✗ Missed | Occupied (mmWave saves it) |
+| Student standing at desk briefly | ✓ Detected | ✓ Detected | Occupied |
+| Bag on chair, stuff on desk, nobody there | ✗ No micro-motion | ✗ No vibration | Hoarded |
 | Empty seat | ✗ Nothing | ✗ Nothing | Vacant |
 
-Neither sensor alone handles all cases correctly. Together they provide robust three-state detection.
+### SCD40 — CO₂ Sensor (~$10–15)
 
-### RGB LED (~$0.30) — Hoarding Alert Light
+Detects **CO₂ concentration** in the immediate vicinity of the seat. A person breathing raises local CO₂ levels above the ambient baseline (~400 ppm); an abandoned bag does not. This is the strongest differentiator between a **hoarded** seat (flat CO₂, baseline) and a truly **occupied** seat (rising CO₂).
 
-A single WS2812B (NeoPixel) RGB LED at each seat. It is **off during normal operation** — it does not indicate vacant or occupied status (the dashboard handles that). It **only turns on when the system suspects hoarding**, serving two purposes:
+The **CO₂ delta** (rate of change over 30 seconds) is used as a key feature in the XGBoost classifier — a flat or falling delta alongside no mmWave micro-motion is a high-confidence hoarding signal.
 
-1. **Returning student**: A clear physical signal that they need to press the button to confirm their presence
+### RFID Reader — Identity & Presence Confirmation (~$1–3)
+
+When a student arrives at their seat, they tap their student ID card on the RFID reader to confirm their presence. The seat is then marked **Occupied** and bound to that specific student's ID.
+
+If a student needs to leave temporarily, they must **reserve the seat via the app**. If they exceed the reservation window (30 minutes), the seat is flagged and library staff are notified. Staff can return the student's belongings once the student presents their ID card.
+
+If a student leaves belongings without ever tapping their ID — a **Ghost Occupied** state — the system prompts for an ID tap. Without a tap within 10 minutes, the seat escalates directly to Flagged.
+
+### RGB LED (~$0.30) — Ambient Status Light
+
+A single RGB LED at each seat. It is **off during normal operation** — it does not indicate vacant or occupied status (the dashboard handles that). It **only activates when the system requires student or staff attention**, serving two purposes:
+
+1. **Returning student**: A clear physical signal at the seat that action is needed (tap ID or the seat will be flagged)
 2. **Library staff**: A visual marker visible from across the room — staff can scan a floor and instantly spot lit-up seats without checking the dashboard
 
-### Tactile Push Button (~$0.10) — Presence Confirmation
-
-When the LED lights up (hoarding suspected), the student presses the button to say **"I'm back."** This solves the hardest problem in hoarding detection: distinguishing a 5-minute bathroom break from a 2-hour absence.
-
-Without the button, the system would need either a long timeout (missing real hoarding) or a short timeout (generating false alerts on quick breaks). The button lets honest students self-resolve quickly.
-
-The button is the lowest-friction confirmation method — no app, no card, no account, just press.
+| Color | Meaning |
+|---|---|
+| Green        | Occupied (normal) |
+|  White pulse | Awaiting RFID tap (Ghost Occupied) |
+|  Blue steady | Reserved — student away, timer running |
+|  Amber steady | Suspected Hoarding — student should tap ID |
+|  Red flashing | Confirmed Hoarding — staff notified |
 
 ## Seat State Logic & Workflow
 
 ### Normal Operation (LED off)
 
 1. **Student arrives** at an empty seat and sits down
-2. Chair FSR detects weight → server marks seat as **Occupied**
-3. Student studies — IMU and FSR continuously confirm presence
-4. **Student leaves** and takes belongings → sensors detect no presence → server marks seat as **Vacant**
-5. Other students check the **web dashboard** on their phone to find vacant seats before walking over
+2. mmWave detects presence → server marks seat as **Occupied**
+3. Student taps their ID on the RFID reader → session is bound to their student ID
+4. Student studies — mmWave, IMU, and SCD40 continuously confirm presence
+5. **Student leaves** - tap card again and takes all belongings → sensors clear → seat returns to **Vacant**
 
-### Hoarding Detection (LED turns on)
+### Leaving Temporarily — Reservation Mode
 
-1. Chair FSR reads no weight and IMU reads no vibration for **30 minutes**, but the seat was previously Occupied
-2. Server flags seat as **Suspected Hoarding**
-3. ESP32 turns on the **RGB LED** (amber)
-4. **If the student returns and presses the button** → LED turns off, seat returns to Occupied, 30-minute timer resets
-5. **If no button press within 5 minutes** → seat escalates to **Confirmed Hoarding** (LED flashes red), staff dashboard is flagged
-6. Staff can investigate or remotely release the seat from the dashboard
+1. Student reserve seat on phone/pc (similar to writing a note now) → seat enters **Reserved**, 30-minute countdown starts
+2. Student receives a push notification at **T−5 minutes** as a warning
+3. Student may **extend once (+15 min)** via the app
+4. If student returns and taps ID → timer cancels, seat returns to **Occupied**
+5. If mmWave + CO₂ confirm the student has returned (person detected, CO₂ rising) → seat auto-resumes
+
+### Hoarding Detection & Escalation
+
+1. mmWave detects no micro-motion, IMU detects no vibration, and CO₂ remains at baseline for **30 minutes** while the seat was previously Occupied and no reservation was made
+2. Server flags seat as **Suspected Hoarding** → LED turns amber
+3. **Student returns and taps ID** → LED off, seat returns to Occupied, timer resets
+4. **No tap within 5 minutes** → escalates to **Confirmed Hoarding** → LED flashes red, staff app receives alert with seat location and timestamp
+5. Staff collects belongings; student reclaims by tapping their ID at any RFID terminal
+
+### Ghost Occupied Handling
+
+1. Sensors detect possible belongings (no mmWave micro-motion, no IMU activity, flat CO₂) but student did not reserve seat in app
+2. LED pulses white — seat prompts: _"Tap your ID to claim this seat"_
+3. Send notification to student app: _"We detected belongings at a seat. Please tap your ID at the seat to confirm your reservation or the seat will be flagged in 10 minutes."_
+3. No tap within **10 minutes** → escalates directly to Flagged
 
 ### State Summary
 
-| State | LED | Dashboard | Button Action |
+| State | LED | Dashboard | How to Resolve |
 |---|---|---|---|
-| Vacant | Off | Available (green) | No effect |
-| Occupied | Off | Occupied (red) | No effect |
-| Suspected Hoarding | Amber (on) | Verify (amber) | Press → returns to Occupied |
-| Confirmed Hoarding | Red (flashing) | Hoarded — staff flagged | Staff resets remotely |
+| Vacant | Off | 🟢 Available | Student sits down |
+| Occupied | 🟢 Green | 🔴 Occupied | -- |
+| Reserved | 🔵 Blue steady | 🔵 Away (timer shown) | Student returns & taps ID |
+| Suspected Hoarding | 🟡 Amber steady | 🟡 Verify | Student taps ID within 5 min |
+| Confirmed Hoarding | 🔴 Red flashing | 🔴 Flagged — staff alerted | Staff resets remotely or on-site |
+| Ghost Occupied | ⚪ White pulse | ⚠️ Unregistered | Student taps ID within 10 min |
 
 ## Software Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Firmware | Arduino / MicroPython on ESP32 | Read sensors, control LED/button, send data over Wi-Fi |
-| Backend | Python Flask | Receive sensor data, run seat-state logic & timeouts, serve dashboard |
-| Real-time updates | Socket.IO | Push seat state changes to the web dashboard instantly |
-| Frontend | HTML/CSS/JS | Live dashboard with floor map showing seat statuses |
+| Firmware | Arduino / MicroPython on ESP32 | Read sensors, control LED/RFID, POST events to server |
+| Backend | Python Flask + APScheduler | Seat state machine, reservation timers, XGBoost inference |
+| ML Model | XGBoost | Sensor fusion classifier (mmWave + IMU + CO₂) |
+| Real-time updates | Socket.IO | Push seat state changes to dashboard and app instantly |
+| Notifications | Firebase Cloud Messaging (FCM) | Push alerts to student and staff mobile apps |
+| Frontend | HTML / CSS / JS | Live floor map dashboard; student reservation app |
 
 ## Estimated Per-Seat Bill of Materials
 
 | Component | Estimated Cost |
 |---|---|
-| ESP32 DevKit V1 | $4–6 |
-| MPU6050 (IMU) | $1–2 |
-| FSR / Load Cell | $2–5 |
+| ESP32 DevKit V1 (WROOM-32) | $4–6 |
+| MPU6050 IMU | $1–2 |
+| mmWave Radar Sensor | $3–6 |
+| SCD40 CO₂ Sensor | $10–15 |
+| RFID Reader (RC522) | $1–3 |
 | WS2812B RGB LED | $0.30 |
-| Tactile Push Button | $0.10 |
 | Wiring & Enclosure | $2–3 |
-| **Total per seat** | **~$10–16** |
+| **Total per seat** | **~$21–35** |
 
 ## Physical Setup
 
-The sensor node (ESP32 + IMU + LED + button) is mounted in a small enclosure attached to the desk. The IMU is adhered to the underside of the desk surface. The FSR or load cell is placed under or on the chair seat. The LED and button are visible and accessible to the student on the desk surface or enclosure.
+The sensor node (ESP32 + RFID reader + RGB LED) sits in a small enclosure on the desk surface, accessible to the student. The MPU6050 is adhered to the **underside of the desk**. The mmWave radar and SCD40 are mounted in the enclosure facing the seat area. All wiring runs along the desk leg into the enclosure.
 
-## Demo Plan
+## Innovation & Design Rationale
 
-1. Set up one seat with the full sensor node and chair sensor
-2. Open the web dashboard on a screen
-3. **Vacant**: Seat is empty — dashboard shows green, LED is off
-4. **Occupied**: Sit down — dashboard updates to red in real time, LED remains off
-5. **Hoarding trigger**: Leave the seat (simulate a 30-min timeout with a shortened timer for demo) — LED turns amber, dashboard shows amber
-6. **Confirmation**: Return and press the button — LED turns off, dashboard returns to red
-7. **Hoarding escalation**: Leave again, do not press button — LED flashes red, staff dashboard flags the seat
+### Study time tracking
 
-## Innovation and Novelty
+Student can check how many hours they spent studying at the library. This feature may also be added to some study tracking app for UST students in the future.
+The school may also use the data to analyze studying time for different majors.
 
-Unlike camera-based solutions (e.g., YOLOv8 vision models), this system:
+### Privacy-First by Design
 
-- **Preserves privacy** — no images are captured, no visual data is stored or transmitted
-- **Requires no training data** — sensor thresholds and logic replace ML model training, eliminating the difficulty of collecting labeled library footage
-- **Runs on-device** — no GPU server needed for inference; the ESP32 handles all sensor processing locally
-- **Achieves three-state detection** without vision by combining complementary sensor modalities (pressure + vibration + manual confirmation)
+No cameras. No images. No video. No visual data is captured, stored, or transmitted at any point — a significant advantage over YOLOv8 or thermal camera systems in a library setting where students expect privacy.
 
-Compared to single-sensor approaches (mmWave, thermal, ultrasonic):
+### No Vision-Based Training Data Required
 
-- **mmWave** suffers from interference and reduced accuracy when seats are closely spaced
-- **Thermal sensors** produce false readings from laptops, chargers, and other heat sources
-- **Ultrasonic** detects presence but cannot distinguish a person from belongings
+The mmWave + IMU + CO₂ sensor fusion operates on **measurable physical signals** — micro-motion, vibration, and gas concentration — rather than visual patterns. The XGBoost classifier is trained on simple labeled sensor readings, not hours of annotated video footage.
 
-Our multi-sensor fusion approach provides reliable, fine-grained seat-state classification while remaining low-cost, privacy-safe, and easy to deploy.
+### Why Not Single-Sensor Alternatives?
+
+| Sensor | Limitation |
+|---|---|
+| mmWave alone | Detects presence but cannot distinguish a still bag from a still person without CO₂ confirmation |
+| CO₂ alone | Slow response time; affected by room ventilation and neighbouring seats |
+| IMU alone | Misses a completely still, seated student |
+| Camera + CV | Privacy concerns; requires GPU inference; needs large labeled dataset |
+
+The **mmWave + IMU + SCD40 fusion** addresses all of these limitations while remaining low-cost, privacy-safe, and deployable on standard library furniture.
+
