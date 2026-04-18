@@ -1,0 +1,169 @@
+/* ── Reset & base ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0f1117;
+    color: #e4e4e7;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+header {
+    background: #16181d;
+    padding: 1.2rem 2rem;
+    border-bottom: 1px solid #2a2d35;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+#stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.stat {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    background: #1e2028;
+    border: 1px solid #2a2d35;
+}
+.stat.vacant   { color: #86efac; }
+.stat.occupied { color: #fca5a5; }
+.stat.reserved { color: #93c5fd; }
+.stat.hoarded  { color: #fbbf24; }
+
+/* ── Seat grid ──────────────────────────────────────────────── */
+main {
+    flex: 1;
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.seat-card {
+    border-radius: 12px;
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    transition: all 0.35s ease;
+    border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.seat-card .seat-id {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.seat-card .seat-state {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.85;
+}
+.seat-card .seat-student {
+    font-size: 0.78rem;
+    opacity: 0.6;
+}
+.seat-card .seat-time {
+    font-size: 0.72rem;
+    opacity: 0.45;
+    margin-top: auto;
+}
+.seat-card .btn-reset {
+    margin-top: 0.6rem;
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: none; /* shown only for hoarding */
+}
+.seat-card .btn-reset:hover { background: rgba(255,255,255,0.3); }
+
+/* ── State colours ──────────────────────────────────────────── */
+.seat-card.vacant {
+    background: #1a1d24;
+    border-color: #2a2d35;
+}
+.seat-card.occupied {
+    background: linear-gradient(135deg, #064e3b, #065f46);
+    border-color: #10b981;
+}
+.seat-card.reserved {
+    background: linear-gradient(135deg, #1e3a5f, #1e40af);
+    border-color: #3b82f6;
+}
+.seat-card.suspected_hoarding {
+    background: linear-gradient(135deg, #78350f, #92400e);
+    border-color: #f59e0b;
+}
+.seat-card.confirmed_hoarding {
+    background: linear-gradient(135deg, #7f1d1d, #991b1b);
+    border-color: #ef4444;
+    animation: pulse-red 1.2s ease-in-out infinite;
+}
+.seat-card.confirmed_hoarding .btn-reset { display: inline-block; }
+.seat-card.suspected_hoarding .btn-reset { display: inline-block; }
+
+.seat-card.ghost_occupied {
+    background: linear-gradient(135deg, #27272a, #3f3f46);
+    border-color: #a1a1aa;
+    animation: pulse-white 2s ease-in-out infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50%      { box-shadow: 0 0 20px 4px rgba(239, 68, 68, 0.25); }
+}
+@keyframes pulse-white {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.15); }
+    50%      { box-shadow: 0 0 16px 3px rgba(255, 255, 255, 0.10); }
+}
+
+/* ── LED indicator dot ──────────────────────────────────────── */
+.seat-card::before {
+    content: "";
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3f3f46;
+    transition: background 0.3s;
+}
+.seat-card.occupied::before   { background: #10b981; }
+.seat-card.reserved::before   { background: #3b82f6; }
+.seat-card.suspected_hoarding::before { background: #f59e0b; }
+.seat-card.confirmed_hoarding::before { background: #ef4444; }
+.seat-card.ghost_occupied::before     { background: #e4e4e7; }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+footer {
+    background: #16181d;
+    border-top: 1px solid #2a2d35;
+    padding: 0.8rem 2rem;
+    text-align: center;
+    font-size: 0.75rem;
+    opacity: 0.5;
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Seat Monitor — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Smart Seat Monitor</h1>
+        <div id="stats">
+            <span class="stat" id="stat-total">Total: —</span>
+            <span class="stat vacant">Vacant: —</span>
+            <span class="stat occupied">Occupied: —</span>
+            <span class="stat reserved">Reserved: —</span>
+            <span class="stat hoarded">Hoarded: —</span>
+        </div>
+    </header>
+
+    <main id="seat-grid"></main>
+
+    <footer>
+        <p>Real-time updates via Socket.IO &middot; COMP4531 Smart Seat Monitoring System</p>
+    </footer>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
