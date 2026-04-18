@@ -12,4 +12,9 @@
 #define I2C_SDA 5
 #define I2C_SCL 4
 
+// mmWave Pins
+#define mmWave_Tx 9
+#define mmWave_Rx 10
+// threshold
+#define THRESHOLD 75
 #endif
