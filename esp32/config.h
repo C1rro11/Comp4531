@@ -6,7 +6,8 @@
 #define WIFI_PASS "92511265"
 
 // Flask server ( NFC )
-#define SERVER_URL "http://192.168.31.193:5000/nfc"
+#define NFC_SERVER_URL "http://192.168.31.193:5000/nfc"
+#define SDC_SERVER_URL "http://192.168.31.193:5000/sdc40"
 
 // NFC Pins (N16R8)
 #define I2C_SDA 5
