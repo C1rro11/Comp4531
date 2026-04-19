@@ -1,8 +1,9 @@
 #include "network_module.h"
 #include "config.h"
-#include <WiFi.h>
-#include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFi.h>
+#include <cstdint>
 
 void initWiFi() {
   Serial.print("Connecting to Wi-Fi: ");
@@ -17,14 +18,38 @@ void initWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-void sendUIDToServer(String uid) {
+void sendNFCUIDToServer(String uid) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(SERVER_URL);
+    http.begin(NFC_SERVER_URL);
     http.addHeader("Content-Type", "application/json");
     JsonDocument doc;
     String jsonString;
     doc["uid"] = uid;
+    serializeJson(doc, jsonString);
+    serializeJson(doc, Serial);
+    Serial.println();
+
+    int httpResponseCode = http.POST(jsonString);
+    if (httpResponseCode > 0) {
+      Serial.println("Server replied: " + http.getString());
+    } else {
+      Serial.println("Error sending POST");
+    }
+    http.end();
+  }
+}
+
+void sendSDC40DataToServer(uint16_t &co2, float &temperature, float &humidity) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(SDC_SERVER_URL);
+    http.addHeader("Content-Type", "application/json");
+    JsonDocument doc;
+    String jsonString;
+    doc["co2"] = co2;
+    doc["temperature"] = temperature;
+    doc["humidity"] = humidity;
     serializeJson(doc, jsonString);
     serializeJson(doc, Serial);
     Serial.println();
