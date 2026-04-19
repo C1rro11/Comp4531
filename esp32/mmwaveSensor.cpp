@@ -61,7 +61,34 @@ bool mmWaveSensor::_sendCommand(uint16_t command, const uint32_t arg,
   return _dataPtr->write(buffer, idx) == idx;
 }
 
-void mmWaveSensor::_readFrame() {}
+bool mmWaveSensor::readFrame(uint8_t *outBuf) {
+  while (_dataPtr->available() > 0) {
+    // Maybe add timeout reset logic here if needed
+    uint8_t byte = _dataPtr->read();
+    if (!_frameIdx) {
+      if (byte == static_cast<uint8_t>(RaderCommand::HEADER_BYTE)) {
+        _frameBuffer[_frameIdx++] = byte;
+      }
+      continue;
+    }
+    _frameBuffer[_frameIdx++] = byte;
+    if (_frameIdx == 45) {
+      _frameIdx = 0;
+      if (_frameBuffer[41] ==
+              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_01) &&
+          _frameBuffer[42] ==
+              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_02) &&
+          _frameBuffer[43] ==
+              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_03) &&
+          _frameBuffer[44] ==
+              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_04)) {
+        memcpy(outBuf, _frameBuffer, 45);
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 void mmWaveSensor::debugPrintIncoming() {
   while (_dataPtr->available() > 0) {

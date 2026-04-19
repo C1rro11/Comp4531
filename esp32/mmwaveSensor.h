@@ -12,12 +12,18 @@ public:
   bool readFirmwareVersion();
   bool readSerialNumber();
   void debugPrintIncoming();
+  bool readFrame(uint8_t *outBuf);
 
 private:
   enum class RaderCommand : uint8_t {
+    HEADER_BYTE = 0xF4,
     READ_FIRMWARE_VERSION = 0x00,
     READ_SERIAL_NUMBER = 0x11,
     SET_MODE = 0x12,
+    TAIL_BYTE_01 = 0xF8,
+    TAIL_BYTE_02 = 0xF7,
+    TAIL_BYTE_03 = 0xF6,
+    TAIL_BYTE_04 = 0xF5,
 
     // Add more commands as needed
   };
@@ -30,6 +36,8 @@ private:
     REPORT = 0x04,
   };
   const int COMMANDSIZE = 2;
+  uint8_t _frameIdx = 0;
+  uint8_t _frameBuffer[64];
 
   Stream *_dataPtr = nullptr;
   Stream *_debugPtr = nullptr;
@@ -41,7 +49,6 @@ private:
   void _writeLE(uint32_t value, size_t byteCount, uint8_t *buffer, size_t &idx);
   void _writeBytes(const uint8_t *value, size_t valueLen, uint8_t *buffer,
                    size_t &idx);
-  void _readFrame();
 };
 
 #endif
