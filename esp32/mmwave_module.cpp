@@ -11,3 +11,18 @@ void initMMWave() {
 }
 
 void mmwaveDebug() { mmwave.debugPrintIncoming(); }
+
+bool readMMWaveData(mmwaveStruct &mmwaveData) {
+  uint8_t buf[64];
+  if (!mmwave.readFrame(buf)) {
+    Serial.println("No valid mmWave frame received.");
+    return false;
+  }
+
+  mmwaveData.detection = buf[6];
+  mmwaveData.distance = buf[7] | (buf[8] << 8);
+  for (int i = 0; i < 16; i++) {
+    mmwaveData.gateEnergy[i] = (buf[9 + i * 2]) | (buf[10 + i * 2] << 8);
+  }
+  return true;
+}
