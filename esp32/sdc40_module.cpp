@@ -1,5 +1,6 @@
 #include "sdc40_module.h"
 #include "config.h"
+#include <cstdint>
 
 SensirionI2cScd4x scd4x;
 
@@ -11,7 +12,7 @@ void initSDC40() {
   Serial.println("SCD40 Sensor is ready!");
 }
 
-void readSDC40() {
+void readSDC40(uint16_t &co2, float &temperature, float &humidity) {
   bool dataReady = false;
   scd4x.getDataReadyStatus(dataReady);
 
@@ -19,9 +20,6 @@ void readSDC40() {
     Serial.println("SCD40 data not ready");
     return;
   }
-
-  uint16_t co2;
-  float temperature, humidity;
 
   uint16_t error = scd4x.readMeasurement(co2, temperature, humidity);
   if (error) {

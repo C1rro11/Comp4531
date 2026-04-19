@@ -9,8 +9,8 @@ void setup() {
   Serial.begin(115200);
   delay(3000);
   Serial.println("Starting ESP32 System...");
-  //initMMWave();
-  //mmwaveDebug();
+  initMMWave();
+  delay(100);
   initSDC40();
   initWiFi();
 
@@ -18,10 +18,25 @@ void setup() {
 }
 
 void loop() {
+  mmwaveStruct mmwaveData;
+  if(readMMWaveData(mmwaveData)) {
+    Serial.print("Detection: "); Serial.print(mmwaveData.detection);
+    Serial.print(", Distance: "); Serial.print(mmwaveData.distance);
+    Serial.print(", Gate Energy: ");
+    for (int i = 0; i < 16; i++) {
+      Serial.print(mmwaveData.gateEnergy[i]);
+      if (i < 15) Serial.print(" ");
+    }
+    Serial.println();
+  }
+  delay(1000);
+  
   //mmwaveDebug();
   // delay(100);
-  readSDC40();
-  delay(5000); // Read every 5 seconds
+  //uint16_t co2; float temperature, humidity;
+  //readSDC40(co2, temperature, humidity);
+  //sendSDC40DataToServer(co2, temperature, humidity);
+  //delay(5000); // Read every 5 seconds
   
   /***
   // 1. Check for a card
@@ -32,7 +47,7 @@ void loop() {
     Serial.println("Found Card: " + cardUID);
     
     // Send it to the server
-    sendUIDToServer(cardUID);
+    sendNFCUIDToServer(cardUID);
     
     // Wait so we don't spam the server
     delay(2000); 
