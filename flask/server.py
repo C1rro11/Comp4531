@@ -38,6 +38,35 @@ def receive_mmwave():
     return "success"
 
 
+@app.route("/sdc40", methods=["POST"])
+def receive_sdc():
+    try:
+        data = request.get_json()
+
+        if data and "co2" and "temperature" and "humidity" in data:
+            co2 = data["co2"]
+            temperature = data["temperature"]
+            humidity = data["humidity"]
+            print(
+                f"\n[SUCCESS] Received SDC Data - CO2: {co2} ppm, Temperature: {temperature} °C, Humidity: {humidity} %"
+            )
+
+            return jsonify({"status": "success", "message": "SDC data received"}), 200
+        else:
+            print(
+                "Received SDC request, but missing 'co2', 'temperature', or 'humidity' in JSON."
+            )
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": "Missing CO2, temperature, or humidity data",
+                }
+            ), 400
+    except Exception as e:
+        print(f"Error processing SDC request: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 if __name__ == "__main__":
     # host='0.0.0.0' is crucial! It allows the ESP32 to connect over the local network
     # instead of restricting the server to localhost (127.0.0.1) only.
