@@ -1,35 +1,35 @@
 #include "mmwaveSensor.h"
 #include <cstdint>
 
-mmWaveSensor::mmWaveSensor(Stream &dataStream, Stream &debugStream)
+mmwaveSensor::mmwaveSensor(Stream &dataStream, Stream &debugStream)
     : _dataPtr(&dataStream), _debugPtr(&debugStream) {}
 
-bool mmWaveSensor::begin() { return _enableReportMode(); }
+bool mmwaveSensor::begin() { return _enableReportMode(); }
 
-void mmWaveSensor::_writeLE(uint32_t value, size_t byteCount, uint8_t *buffer,
+void mmwaveSensor::_writeLE(uint32_t value, size_t byteCount, uint8_t *buffer,
                             size_t &idx) {
   for (uint8_t i = 0; i < byteCount; i++) {
     buffer[idx++] = (value >> (i * 8)) & 0xFF;
   }
 }
 
-void mmWaveSensor::_writeBytes(const uint8_t *value, size_t valueLen,
+void mmwaveSensor::_writeBytes(const uint8_t *value, size_t valueLen,
                                uint8_t *buffer, size_t &idx) {
   for (size_t i = 0; i < valueLen; i++) {
     buffer[idx++] = value[i];
   }
 }
 
-bool mmWaveSensor::_enableReportMode() {
-  RaderCommand command = RaderCommand::SET_MODE;
-  RaderMode mode = RaderMode::REPORT;
+bool mmwaveSensor::_enableReportMode() {
+  RadarCommand command = RadarCommand::SET_MODE;
+  RadarMode mode = RadarMode::REPORT;
   Arg arg = Arg::Distance;
   return _sendCommand(static_cast<uint16_t>(command),
                       static_cast<uint32_t>(arg), 2,
                       static_cast<uint32_t>(mode), 4);
 }
 
-bool mmWaveSensor::_sendCommand(uint16_t command, const uint32_t arg,
+bool mmwaveSensor::_sendCommand(uint16_t command, const uint32_t arg,
                                 size_t argSize, const uint32_t payload,
                                 size_t payloadSize) {
   if (!_dataPtr)
@@ -61,12 +61,12 @@ bool mmWaveSensor::_sendCommand(uint16_t command, const uint32_t arg,
   return _dataPtr->write(buffer, idx) == idx;
 }
 
-bool mmWaveSensor::readFrame(uint8_t *outBuf) {
+bool mmwaveSensor::readFrame(uint8_t *outBuf) {
   while (_dataPtr->available() > 0) {
     // Maybe add timeout reset logic here if needed
     uint8_t byte = _dataPtr->read();
     if (!_frameIdx) {
-      if (byte == static_cast<uint8_t>(RaderCommand::HEADER_BYTE)) {
+      if (byte == static_cast<uint8_t>(RadarCommand::HEADER_BYTE)) {
         _frameBuffer[_frameIdx++] = byte;
       }
       continue;
@@ -75,13 +75,13 @@ bool mmWaveSensor::readFrame(uint8_t *outBuf) {
     if (_frameIdx == 45) {
       _frameIdx = 0;
       if (_frameBuffer[41] ==
-              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_01) &&
+              static_cast<uint8_t>(RadarCommand::TAIL_BYTE_01) &&
           _frameBuffer[42] ==
-              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_02) &&
+              static_cast<uint8_t>(RadarCommand::TAIL_BYTE_02) &&
           _frameBuffer[43] ==
-              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_03) &&
+              static_cast<uint8_t>(RadarCommand::TAIL_BYTE_03) &&
           _frameBuffer[44] ==
-              static_cast<uint8_t>(RaderCommand::TAIL_BYTE_04)) {
+              static_cast<uint8_t>(RadarCommand::TAIL_BYTE_04)) {
         memcpy(outBuf, _frameBuffer, 45);
         return true;
       }
@@ -90,7 +90,7 @@ bool mmWaveSensor::readFrame(uint8_t *outBuf) {
   return false;
 }
 
-void mmWaveSensor::debugPrintIncoming() {
+void mmwaveSensor::debugPrintIncoming() {
   while (_dataPtr->available() > 0) {
     uint8_t buf[64];
     size_t n = _dataPtr->readBytes(buf, min(64, _dataPtr->available()));

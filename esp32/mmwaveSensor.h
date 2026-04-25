@@ -4,9 +4,9 @@
 #include <Arduino.h>
 #include <cstdint>
 
-class mmWaveSensor {
+class mmwaveSensor {
 public:
-  mmWaveSensor(Stream &dataStream, Stream &debugStream);
+  mmwaveSensor(Stream &dataStream, Stream &debugStream);
 
   bool begin();
   bool readFirmwareVersion();
@@ -15,7 +15,7 @@ public:
   bool readFrame(uint8_t *outBuf);
 
 private:
-  enum class RaderCommand : uint8_t {
+  enum class RadarCommand : uint8_t {
     HEADER_BYTE = 0xF4,
     READ_FIRMWARE_VERSION = 0x00,
     READ_SERIAL_NUMBER = 0x11,
@@ -32,7 +32,7 @@ private:
     Distance = 0x00,
   };
 
-  enum class RaderMode : uint8_t {
+  enum class RadarMode : uint8_t {
     REPORT = 0x04,
   };
   const int COMMANDSIZE = 2;

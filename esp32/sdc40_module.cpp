@@ -2,12 +2,13 @@
 #include "config.h"
 #include <cstdint>
 
+TwoWire scd40Wire = TwoWire(1);
 SensirionI2cScd4x scd4x;
 
 void initSDC40() {
   Serial.println("Starting SCD40 Sensor...");
-  Wire.begin(I2C_SDA, I2C_SCL);
-  scd4x.begin(Wire, 0x62);
+  scd40Wire.begin(I2C_SDA_2, I2C_SCL_2);
+  scd4x.begin(scd40Wire, 0x62);
   scd4x.startPeriodicMeasurement();
   Serial.println("SCD40 Sensor is ready!");
 }

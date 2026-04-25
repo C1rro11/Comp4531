@@ -2,12 +2,12 @@
 #include "config.h"
 #include "mmwaveSensor.h"
 
-mmWaveSensor mmwave(Serial2, Serial);
+mmwaveSensor mmwave(Serial2, Serial);
 void initMMWave() {
-  Serial.println("Initializing mmWave Sensor...");
-  Serial2.begin(115200, SERIAL_8N1, mmWave_Rx, mmWave_Tx);
-  mmwave.begin() ? Serial.println("mmWave Sensor initialized successfully!")
-                 : Serial.println("Failed to initialize mmWave Sensor.");
+  Serial.println("Initializing mmwave Sensor...");
+  Serial2.begin(115200, SERIAL_8N1, mmwave_Rx, mmwave_Tx);
+  mmwave.begin() ? Serial.println("mmwave Sensor initialized successfully!")
+                 : Serial.println("Failed to initialize mmwave Sensor.");
 }
 
 void mmwaveDebug() { mmwave.debugPrintIncoming(); }
@@ -15,7 +15,7 @@ void mmwaveDebug() { mmwave.debugPrintIncoming(); }
 bool readMMWaveData(mmwaveStruct &mmwaveData) {
   uint8_t buf[64];
   if (!mmwave.readFrame(buf)) {
-    Serial.println("No valid mmWave frame received.");
+    Serial.println("No valid mmwave frame received.");
     return false;
   }
 
