@@ -34,8 +34,42 @@ def receive_nfc():
 
 @app.route("/mmwave", methods=["POST"])
 def receive_mmwave():
-    pass
+    try:
+        data = request.get_json()
+        if data:
+            detection = data["detection"]
+            distance = data["distance"]
+            energyArray = data["energyArray"]
+            print(
+                f"\n[SUCCESS] Received mmWave Data - Detection: {detection}, Distance: {distance} cm, Energy Array: {energyArray}"
+            )
+            return jsonify(
+                {
+                    "status": "success",
+                    "message": f"mmWave data received, Distance: {distance} cm",
+                }
+            ), 200
+
+    except Exception as e:
+        print(f"Error processing mmWave request: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
     return "success"
+
+
+@app.route("/seat_state", methods=["POST"])
+def receive_seat_state():
+    try:
+        data = request.get_json()
+
+        if data:
+            seat_state = data["seatState"]
+            print(f"\n[SUCCESS] Received Seat State Data - Seat State: {seat_state}")
+        return jsonify(
+            {"status": "success", "message": f"Seat state {seat_state} received"}
+        ), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route("/sdc40", methods=["POST"])
@@ -43,7 +77,7 @@ def receive_sdc():
     try:
         data = request.get_json()
 
-        if data and "co2" and "temperature" and "humidity" in data:
+        if data:
             co2 = data["co2"]
             temperature = data["temperature"]
             humidity = data["humidity"]
