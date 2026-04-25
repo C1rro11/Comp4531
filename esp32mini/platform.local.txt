@@ -1,0 +1,1 @@
+build.esp32s3.usb_cdc_on_boot=1
