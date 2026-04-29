@@ -64,7 +64,7 @@ void setup() {
 
 }
 
-
+bool firstLoop = true;
 unsigned long lastMMWave = 0;
 unsigned long lastSDC40  = 0;
 
@@ -80,9 +80,15 @@ void loop() {
   }
 
   if (now - lastSDC40 >= 5000) {
-    lastSDC40 = now;
-    uint16_t co2; float temperature, humidity;
-    readSDC40(co2, temperature, humidity);
-    sendSDC40DataToServer(co2, temperature, humidity);
+    if (firstLoop) {
+      firstLoop = false;
+      lastSDC40 = now;
+    }
+    else {
+      lastSDC40 = now;
+      uint16_t co2; float temperature, humidity;
+      readSDC40(co2, temperature, humidity);
+      sendSDC40DataToServer(co2, temperature, humidity);
+    }
   }
 }
