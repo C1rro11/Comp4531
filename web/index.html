@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Chair Monitor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Smart Chair Monitor</h1>
+    <p>
+      Chair value <code>1</code> means occupied and turns red. Chair value <code>0</code> means empty and turns green.
+      The page can read chair data from Flask by HTTP fetch and from a WebSocket for live updates.
+    </p>
+
+    <div class="topbar">
+      <section class="panel">
+        <h2>Connection Settings</h2>
+        <div class="controls">
+          <div class="field">
+            <label for="chairCount">Number of chairs</label>
+            <input id="chairCount" type="number" min="1" value="24" />
+          </div>
+
+          <div class="field">
+            <label for="flaskUrl">Flask data URL</label>
+            <input id="flaskUrl" type="text" placeholder="http://127.0.0.1:5000/chairs" />
+          </div>
+
+          <div class="field">
+            <label for="wsUrl">WebSocket URL</label>
+            <input id="wsUrl" type="text" placeholder="ws://192.168.x.x:81/" />
+          </div>
+
+          <div class="field">
+            <label for="pollMs">Fetch interval (ms)</label>
+            <input id="pollMs" type="number" min="500" step="500" value="2000" />
+          </div>
+
+          <div class="button-row">
+            <button id="applyBtn">Apply Settings</button>
+            <button id="fetchBtn" class="secondary">Fetch Now</button>
+            <button id="wsBtn" class="secondary">Reconnect WebSocket</button>
+            <button id="demoBtn" class="warning">Load Demo Data</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Live Status</h2>
+        <div class="status-list">
+          <div class="status-item">
+            <span class="status-label">Flask HTTP</span>
+            <span id="flaskStatus" class="pill waiting">Waiting</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">WebSocket</span>
+            <span id="wsStatus" class="pill waiting">Waiting</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Last update source</span>
+            <span id="lastSource">No data yet</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Last update time</span>
+            <span id="lastUpdated">-</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="summary">
+      <div class="summary-card">
+        <span class="label">Total Chairs</span>
+        <span id="totalCount" class="value">24</span>
+      </div>
+      <div class="summary-card">
+        <span class="label">Occupied</span>
+        <span id="occupiedCount" class="value">0</span>
+      </div>
+      <div class="summary-card">
+        <span class="label">Vacant</span>
+        <span id="vacantCount" class="value">24</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="legend">
+        <div class="legend-item"><span class="dot red"></span> Occupied chair = <code>1</code></div>
+        <div class="legend-item"><span class="dot green"></span> Empty chair = <code>0</code></div>
+      </div>
+
+      <div id="chairsGrid" class="chairs-grid"></div>
+
+      <div class="note">
+        Accepted data formats for both Flask and WebSocket:
+        <code>[0,1,0,1]</code>,
+        <code>{"chairs":[0,1,0,1]}</code>,
+        <code>{"seats":[{"id":1,"occupied":1},{"id":2,"occupied":0}]}</code>,
+        or a single update like
+        <code>{"id":3,"occupied":1}</code>.
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
