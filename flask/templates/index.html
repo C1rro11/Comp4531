@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seat Detection Dashboard</title>
+  <style>
+    :root { --bg:#0f1117; --card:#1a1d27; --border:#2a2d3a; --text:#e1e4ed; --dim:#6b7280;
+            --green:#22c55e; --red:#ef4444; --orange:#f59e0b; --blue:#3b82f6; --purple:#a855f7; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:var(--bg); color:var(--text); font:14px/1.5 system-ui,monospace; padding:24px; }
+    h1 { font-size:1.4rem; margin-bottom:20px; }
+    h2 { font-size:1rem; margin-bottom:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; }
+    .badge { display:inline-block; padding:6px 18px; border-radius:6px; font-weight:700; font-size:1.2rem; text-transform:uppercase; letter-spacing:2px; }
+    .badge.empty     { background:var(--green); color:#000; }
+    .badge.occupied  { background:var(--red);   color:#fff; }
+    .badge.hoarded   { background:var(--orange);color:#000; }
+    .badge.no_model  { background:var(--dim);   color:#fff; }
+    .conf-bar { height:8px; background:var(--border); border-radius:4px; margin-top:4px; overflow:hidden; }
+    .conf-fill { height:100%; border-radius:4px; transition:width .3s; }
+    .prob-row { display:flex; align-items:center; gap:8px; margin:4px 0; }
+    .prob-name { width:80px; font-size:12px; }
+    .prob-bar-wrap { flex:1; height:14px; background:var(--border); border-radius:4px; overflow:hidden; }
+    .prob-bar { height:100%; border-radius:4px; transition:width .3s; }
+    .prob-val { width:50px; text-align:right; font-size:12px; font-variant-numeric:tabular-nums; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    td { padding:4px 8px; border-bottom:1px solid var(--border); }
+    td:first-child { color:var(--dim); width:140px; }
+    td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+    button { padding:8px 16px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); cursor:pointer; font:inherit; margin:4px; }
+    button:hover { background:var(--border); }
+    button.accent { background:var(--blue); border-color:var(--blue); color:#fff; }
+    button.accent:hover { opacity:.85; }
+    button.danger { background:var(--red); border-color:var(--red); color:#fff; }
+    button.danger:hover { opacity:.85; }
+    input[type=number] { width:60px; padding:6px 8px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); font:inherit; }
+    .section { margin-bottom:16px; }
+    .inline { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+    .timestamp { color:var(--dim); font-size:12px; }
+    .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+    .status-dot.active { background:var(--green); animation:pulse 1s infinite; }
+    @keyframes pulse { 50%{opacity:.4} }
+    .collect-status { font-size:12px; color:var(--orange); margin-top:6px; }
+    .features-scroll { max-height:200px; overflow-y:auto; font-size:11px; color:var(--dim); font-family:monospace; }
+  </style>
+</head>
+<body>
+
+<h1>Seat Detection Dashboard</h1>
+
+<div class="grid">
+
+  <!-- State card -->
+  <div class="card" id="state-card">
+    <h2>Seat State</h2>
+    <div style="text-align:center;padding:12px 0;">
+      <span class="badge no_model" id="badge">NO MODEL</span>
+      <div class="conf-bar" style="margin-top:10px;height:10px;">
+        <div class="conf-fill" id="conf-fill" style="width:0%;background:var(--dim)"></div>
+      </div>
+      <div id="conf-text" style="font-size:12px;color:var(--dim);margin-top:4px;">--</div>
+      <div class="timestamp" id="ts">Waiting for data...</div>
+    </div>
+  </div>
+
+  <!-- Probabilities card -->
+  <div class="card">
+    <h2>Probabilities</h2>
+    <div id="probs">
+      <div class="prob-row"><span class="prob-name">EMPTY</span><div class="prob-bar-wrap"><div class="prob-bar" style="width:0%;background:var(--green)"></div></div><span class="prob-val">0%</span></div>
+      <div class="prob-row"><span class="prob-name">OCCUPIED</span><div class="prob-bar-wrap"><div class="prob-bar" style="width:0%;background:var(--red)"></div></div><span class="prob-val">0%</span></div>
+      <div class="prob-row"><span class="prob-name">HOARDED</span><div class="prob-bar-wrap"><div class="prob-bar" style="width:0%;background:var(--orange)"></div></div><span class="prob-val">0%</span></div>
+    </div>
+  </div>
+
+  <!-- Raw data card -->
+  <div class="card">
+    <h2>Raw Sensor Data</h2>
+    <table id="raw-table">
+      <tr><td>mmWave Distance</td><td id="r-dist">--</td></tr>
+      <tr><td>mmWave Detection</td><td id="r-det">--</td></tr>
+      <tr><td>mmWave Readings</td><td id="r-mmcount">--</td></tr>
+      <tr><td>CO2</td><td id="r-co2">--</td></tr>
+      <tr><td>Temperature</td><td id="r-temp">--</td></tr>
+      <tr><td>Humidity</td><td id="r-hum">--</td></tr>
+      <tr><td>Pressure (seat)</td><td id="r-pres">--</td></tr>
+      <tr><td>Last NFC</td><td id="r-nfc">--</td></tr>
+    </table>
+  </div>
+
+  <!-- Feature vector card -->
+  <div class="card">
+    <h2>Feature Vector <span style="color:var(--dim);font-size:11px;">(54 features)</span></h2>
+    <div class="features-scroll" id="features"></div>
+  </div>
+
+  <!-- Collection controls card -->
+  <div class="card">
+    <h2>Training Data Collection</h2>
+    <div class="section">
+      <div class="inline">
+        <button onclick="startCollect('empty')">Collect EMPTY</button>
+        <button onclick="startCollect('occupied')">Collect OCCUPIED</button>
+        <button onclick="startCollect('hoarded')">Collect HOARDED</button>
+        <input type="number" id="collect-count" value="30" min="5" max="500" style="width:65px;">
+        <span style="color:var(--dim);font-size:12px;">windows</span>
+      </div>
+    </div>
+    <div class="inline">
+      <button class="danger" onclick="stopCollect()">Stop</button>
+      <button class="accent" onclick="doTrain()">Train Model</button>
+      <button onclick="doClear()">Clear All</button>
+    </div>
+    <div class="collect-status" id="collect-msg"></div>
+  </div>
+
+</div>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
