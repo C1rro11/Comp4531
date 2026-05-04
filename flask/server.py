@@ -13,7 +13,6 @@ from model import FEATURE_FULL, LABELS, FeatureExtractor, XGBoostModel
 # =============================================================================
 # Configuration
 # =============================================================================
-WINDOW_SEC = 10
 CO2_HORIZON_SEC = 30
 BUFFER_RETENTION_SEC = 120
 MODEL_PATH = "models/seat_model.pkl"
@@ -23,6 +22,9 @@ TRAINING_DATA_PATH = "training_data/training_data.csv"
 # Shared state (protected by state_lock)
 # =============================================================================
 state_lock = threading.Lock()
+
+co2_enabled = True
+window_sec = 10.0
 
 # data buffers
 mmwave_buffer = deque()      # (timestamp, detection, distance, energy_array)
@@ -53,7 +55,7 @@ collecting = {
     "target": 0,
     "collected": 0,
 }
-training_samples = []   # list of (features_54, label_int)
+training_samples = []   # list of (features_16, label_int)
 
 # feature extractor / model
 extractor = FeatureExtractor()
@@ -154,32 +156,35 @@ def get_distribution():
 # =============================================================================
 
 def window_aggregator():
-    global latest_state
+    global latest_state, window_sec, co2_enabled
 
     while True:
         t0 = time.time()
-        time.sleep(WINDOW_SEC - (t0 % WINDOW_SEC) + 0.1)
+        with state_lock:
+            wnd = window_sec
+        time.sleep(wnd - (t0 % wnd) + 0.1)
         now = time.time()
-        cutoff_10s = now - WINDOW_SEC
+        cutoff_wnd = now - wnd
         cutoff_30s = now - CO2_HORIZON_SEC
 
         with state_lock:
-            # snap mmWave (10 s)
-            mm = [(d, dist, eng) for (ts, d, dist, eng) in mmwave_buffer if ts >= cutoff_10s]
+            # snap mmWave (window)
+            mm = [(d, dist, eng) for (ts, d, dist, eng) in mmwave_buffer if ts >= cutoff_wnd]
 
-            # snap sdc40  →  10 s (temp, hum)  +  30 s (co2)
-            sd10 = [(t, h) for (ts, _, t, h) in sdc40_buffer if ts >= cutoff_10s]
+            # snap sdc40  →  window (temp, hum)  +  30 s (co2)
+            sd10 = [(t, h) for (ts, _, t, h) in sdc40_buffer if ts >= cutoff_wnd]
             co30 = [co2 for (ts, co2, _, _) in sdc40_buffer if ts >= cutoff_30s]
 
             ps = pressure_state
 
-            # extract features  (sd10 used only for raw snapshot display)
             features = extractor.extract_full(mm, co30, ps)
-
-            # raw snapshot
             raw = build_raw_snapshot(mm, co30, sd10)
 
-            # prediction
+            # zero CO2 features when disabled (after delta calc, so deltas stay consistent)
+            if not co2_enabled:
+                features[6] = 0.0   # raw co2_mean
+                features[14] = 0.0  # Δco2_mean
+
             pred, conf = "NO_MODEL", 0.0
             probs = {"EMPTY": 0, "OCCUPIED": 0, "HOARDED": 0}
             if model_obj.trained:
@@ -187,7 +192,6 @@ def window_aggregator():
                 pred = max(probs, key=probs.get)
                 conf = probs[pred]
 
-            # update latest_state
             ver = latest_state["version"] + 1
             latest_state["data"] = {
                 "prediction": pred,
@@ -197,10 +201,13 @@ def window_aggregator():
                 "features": [round(f, 4) for f in features],
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "collecting": dict(collecting),
+                "settings": {
+                    "co2_enabled": co2_enabled,
+                    "window_sec": window_sec,
+                },
             }
             latest_state["version"] = ver
 
-            # auto-collection
             if collecting["active"] and collecting["label"] is not None:
                 training_samples.append((features, collecting["label"]))
                 collecting["collected"] += 1
@@ -212,7 +219,6 @@ def window_aggregator():
                     collecting["label"] = None
                     latest_state["data"]["collecting"] = dict(collecting)
 
-            # purge old buffers
             cutoff_all = now - BUFFER_RETENTION_SEC
             while mmwave_buffer and mmwave_buffer[0][0] < cutoff_all:
                 mmwave_buffer.popleft()
@@ -432,6 +438,32 @@ def api_model_status():
     return jsonify(info), 200
 
 
+# ---- Settings endpoints ----------------------------------------------------
+
+@app.route("/api/co2/toggle", methods=["POST"])
+def api_co2_toggle():
+    global co2_enabled
+    with state_lock:
+        co2_enabled = not co2_enabled
+        st = co2_enabled
+    return jsonify({"status": "ok", "co2_enabled": st}), 200
+
+
+@app.route("/api/window", methods=["POST"])
+def api_window():
+    global window_sec
+    try:
+        data = request.get_json()
+        new_sec = float(data.get("window_sec", 10))
+        if new_sec < 1 or new_sec > 120:
+            return jsonify({"status": "error", "message": "Window must be 1-120 seconds"}), 400
+        with state_lock:
+            window_sec = new_sec
+        return jsonify({"status": "ok", "window_sec": window_sec}), 200
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "Invalid window_sec value"}), 400
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -456,6 +488,6 @@ if __name__ == "__main__":
     print(f"\n  Seat Detection Server")
     print(f"  Dashboard : http://0.0.0.0:5000")
     print(f"  SSE stream: http://0.0.0.0:5000/stream")
-    print(f"  Window    : {WINDOW_SEC}s  |  CO2 horizon: {CO2_HORIZON_SEC}s\n")
+    print(f"  Window    : {window_sec}s  |  CO2 horizon: {CO2_HORIZON_SEC}s  |  CO2: {'ON' if co2_enabled else 'OFF'}\n")
 
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

@@ -2,6 +2,8 @@ const BADGE = document.getElementById("badge");
 const CONF_FILL = document.getElementById("conf-fill");
 const CONF_TEXT = document.getElementById("conf-text");
 const TS = document.getElementById("ts");
+const CO2_TOGGLE = document.getElementById("co2-toggle");
+const WINDOW_INPUT = document.getElementById("window-input");
 
 const CLASS_COLOR = { EMPTY: "#22c55e", OCCUPIED: "#ef4444", HOARDED: "#f59e0b", NO_MODEL: "#6b7280" };
 
@@ -47,24 +49,30 @@ function setVal(id, val) {
 function updateFeatures(feats) {
   const el = document.getElementById("features");
   if (!feats || feats.length === 0) { el.textContent = "--"; return; }
-  const raw = feats.slice(0, 27);
-  const delta = feats.slice(27, 54);
+  const raw = feats.slice(0, 8);
+  const delta = feats.slice(8, 16);
   const labels = [
-    "dist_mean","dist_max","dist_min","dist_std","det_mean","det_sum","rd_count",
-    "gate_0","gate_1","gate_2","gate_3","gate_4","gate_5","gate_6","gate_7",
-    "gate_8","gate_9","gate_10","gate_11","gate_12","gate_13","gate_14","gate_15",
-    "co2_mean","co2_std","co2_rate","pressure"
+    "gate0_mean","gate0_std","gate1_mean","gate1_std",
+    "gate2_mean","gate2_std","co2_mean","pressure"
   ];
-  let html = "<b>Raw (0-26):</b><br>";
+  let html = "<b>Raw (0-7):</b><br>";
   raw.forEach((v, i) => {
-    html += `  ${String(i).padStart(2)} ${labels[i]}: ${v.toFixed(4)}<br>`;
+    html += `  ${i} ${labels[i]}: ${v.toFixed(4)}<br>`;
   });
-  html += "<br><b>Deltas (27-53):</b><br>";
+  html += "<br><b>Deltas (8-15):</b><br>";
   delta.forEach((v, i) => {
     const sign = v >= 0 ? "+" : "";
-    html += `  ${String(i+27).padStart(2)} Δ${labels[i]}: ${sign}${v.toFixed(4)}<br>`;
+    html += `  ${i+8} Δ${labels[i]}: ${sign}${v.toFixed(4)}<br>`;
   });
   el.innerHTML = html;
+}
+
+function updateSettings(settings) {
+  if (!settings) return;
+  CO2_TOGGLE.textContent = "CO2: " + (settings.co2_enabled ? "ON" : "OFF");
+  if (document.activeElement !== WINDOW_INPUT) {
+    WINDOW_INPUT.value = settings.window_sec;
+  }
 }
 
 function updateCollecting(info) {
@@ -90,6 +98,7 @@ function connectSSE() {
     updateProbs(d.probabilities);
     updateRaw(d.raw);
     updateFeatures(d.features);
+    updateSettings(d.settings);
     updateCollecting(d.collecting || {});
   };
   es.onerror = () => {
@@ -123,6 +132,23 @@ async function doClear() {
   if (!confirm("Delete all training data and model?")) return;
   await fetch("/api/clear", { method: "POST" });
   location.reload();
+}
+
+async function toggleCO2() {
+  const r = await fetch("/api/co2/toggle", { method: "POST" });
+  const d = await r.json();
+  CO2_TOGGLE.textContent = "CO2: " + (d.co2_enabled ? "ON" : "OFF");
+}
+
+async function applyWindow() {
+  const val = parseFloat(WINDOW_INPUT.value) || 10;
+  const r = await fetch("/api/window", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ window_sec: val }),
+  });
+  const d = await r.json();
+  if (d.status === "error") alert(d.message);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

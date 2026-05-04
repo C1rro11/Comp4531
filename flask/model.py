@@ -3,38 +3,19 @@ import pickle
 
 import numpy as np
 
-FEATURE_RAW = 27
-FEATURE_FULL = 54
+FEATURE_RAW = 8
+FEATURE_FULL = 16
 LABELS = ["EMPTY", "OCCUPIED", "HOARDED"]
 
 FEATURE_NAMES_RAW = [
-    "dist_mean",     # 0
-    "dist_max",      # 1
-    "dist_min",      # 2
-    "dist_std",      # 3
-    "det_mean",      # 4
-    "det_sum",       # 5
-    "reading_count", # 6
-    "gate_0",        # 7
-    "gate_1",        # 8
-    "gate_2",        # 9
-    "gate_3",        # 10
-    "gate_4",        # 11
-    "gate_5",        # 12
-    "gate_6",        # 13
-    "gate_7",        # 14
-    "gate_8",        # 15
-    "gate_9",        # 16
-    "gate_10",       # 17
-    "gate_11",       # 18
-    "gate_12",       # 19
-    "gate_13",       # 20
-    "gate_14",       # 21
-    "gate_15",       # 22
-    "co2_mean",      # 23
-    "co2_std",       # 24
-    "co2_rate",      # 25  ppm/s over 30s horizon
-    "pressure",      # 26
+    "gate0_mean",   # 0
+    "gate0_std",    # 1
+    "gate1_mean",   # 2
+    "gate1_std",    # 3
+    "gate2_mean",   # 4
+    "gate2_std",    # 5
+    "co2_mean",     # 6
+    "pressure",     # 7
 ]
 
 FEATURE_NAMES_FULL = FEATURE_NAMES_RAW + ["Δ" + n for n in FEATURE_NAMES_RAW]
@@ -42,72 +23,46 @@ FEATURE_NAMES_FULL = FEATURE_NAMES_RAW + ["Δ" + n for n in FEATURE_NAMES_RAW]
 
 class FeatureExtractor:
     """
-    Dual-horizon feature extraction:
-      - 10s window for mmWave and pressure
-      - 30s horizon for CO2 trend
+    Focused feature extraction:
+      - Gate 0-2: mean + std across mmWave readings per window (6 features)
+      - CO2 mean over 30s horizon (1 feature)
+      - Pressure persistent state (1 feature)
 
-    Output: 27 raw features + 27 delta features = 54 total.
-      - mmWave dist/det     (0-6)   7 features
-      - mmWave energy gates (7-22)  16 features — all individual gate values
-      - CO2 30 s horizon    (23-25) 3 features
-      - Pressure            (26)    1 persistent state
+    Output: 8 raw features + 8 delta features = 16 total.
     """
 
     def __init__(self):
         self.prev_raw = None
 
+    @staticmethod
+    def _gate_stats(mmwave_items, gate_idx):
+        vals = [
+            float(e[gate_idx])
+            for (_, _, e) in mmwave_items
+            if e is not None and len(e) > gate_idx
+        ]
+        if len(vals) >= 2:
+            return float(np.mean(vals)), float(np.std(vals))
+        elif vals:
+            return float(vals[0]), 0.0
+        else:
+            return 0.0, 0.0
+
     def extract_raw(self, mmwave_items, co30s, pressure):
-        """
-        mmwave_items : list of (detection, distance, energy_array)
-                       energy_array is list of 16 floats (gates 0-15)
-        co30s        : list of CO2 floats from last 30 s
-        pressure     : float  (persistent last-known seat state 0.0 | 1.0)
-        """
         feats = []
 
-        # ── mmWave dist / det  (0‑6) ──────────────────────────────────
-        if mmwave_items:
-            dists = [d for (_, d, _) in mmwave_items]
-            dets  = [d for (d, _, _) in mmwave_items]
-            feats += [
-                float(np.mean(dists)),
-                float(np.max(dists)),
-                float(np.min(dists)),
-                float(np.std(dists)) if len(dists) > 1 else 0.0,
-                float(np.mean(dets)),
-                float(np.sum(dets)),
-                float(len(mmwave_items)),
-            ]
-        else:
-            feats += [0.0] * 7
+        # ── gate 0-2 mean + std  (0‑5) ──────────────────────────────
+        for gi in range(3):
+            m, s = self._gate_stats(mmwave_items, gi)
+            feats += [m, s]
 
-        # ── mmWave energy — all 16 individual gates  (7‑22) ──────────
-        energies = [
-            np.array(e, dtype=np.float32)
-            for (_, _, e) in mmwave_items
-            if e is not None and len(e) >= 16
-        ]
-        if energies:
-            avg = np.mean(energies, axis=0)        # shape (16,)  — mean per gate
-            feats += avg.tolist()
+        # ── CO2 mean from 30 s horizon  (6) ─────────────────────────
+        if co30s:
+            feats.append(float(np.mean([float(v) for v in co30s])))
         else:
-            feats += [0.0] * 16
+            feats.append(400.0)
 
-        # ── CO2 from 30 s horizon  (23‑25) ────────────────────────────
-        if co30s and len(co30s) >= 2:
-            c = [float(v) for v in co30s]
-            feats += [
-                float(np.mean(c)),
-                float(np.std(c)),
-                float((c[-1] - c[0]) / max(0.1, len(c) * 5)),
-            ]
-        elif co30s:
-            v = float(co30s[-1])
-            feats += [v, 0.0, 0.0]
-        else:
-            feats += [400.0, 0.0, 0.0]
-
-        # ── Persistent pressure state  (26) ───────────────────────────
+        # ── Persistent pressure state  (7) ──────────────────────────
         feats.append(float(pressure))
 
         return feats
@@ -159,7 +114,6 @@ class XGBoostModel:
         self.model = CalibratedClassifierCV(base, method="sigmoid", cv=3)
         self.model.fit(X, y)
 
-        # Average feature importance across CV folds
         importances = []
         for est in self.model.calibrated_classifiers_:
             importances.append(est.estimator.feature_importances_)
@@ -199,11 +153,15 @@ class XGBoostModel:
             return None
         X = np.array(features, dtype=np.float32).reshape(1, -1)
         proba = self.model.predict_proba(X)[0]
-        return {
-            "EMPTY": round(float(proba[0]), 4),
-            "OCCUPIED": round(float(proba[1]), 4),
-            "HOARDED": round(float(proba[2]), 4),
-        }
+        classes = self.model.classes_
+        result = {}
+        for idx, cls in enumerate(classes):
+            label = LABELS[cls] if cls < len(LABELS) else str(cls)
+            result[label] = round(float(proba[idx]), 4)
+        for label in LABELS:
+            if label not in result:
+                result[label] = 0.0
+        return result
 
     def predict(self, features):
         probs = self.predict_proba(features)
