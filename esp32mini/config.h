@@ -5,7 +5,7 @@
 #define WIFI_SSID "COMP4531 demo"
 #define WIFI_PASS "comp4531demo"
 
-#define SERVER_IP "192.168.31.194"
+#define SERVER_IP "172.22.190.112"
 #define SERVER_PORT "5000"
 #define SERVER_URL "http://" SERVER_IP ":" SERVER_PORT
 // Weight sensor pins
